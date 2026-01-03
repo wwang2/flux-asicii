@@ -2,7 +2,7 @@
 
 A static, browser-based tool for converting image sequences into animated ASCII art with retro terminal effects.
 
-**[Launch Live App](https://wujiewang.github.io/flux-asicii/)**
+**[Launch Live App](https://wwang2.github.io/flux-asicii/)**
 
 ![FluxASCII Demo](assets/example.gif)
 
