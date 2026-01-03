@@ -123,7 +123,13 @@ function init() {
         } else {
             document.body.classList.remove('light-mode');
         }
-        if (!state.isPlaying) renderFrame();
+        if (!state.isPlaying) {
+            if (state.images.length === 0) {
+                renderEmptyState();
+            } else {
+                renderFrame();
+            }
+        }
     });
 
     // Editor Logic
@@ -208,25 +214,27 @@ function init() {
     }
     
     handleResize();
-    loadDefaultImages();
+    renderEmptyState();
 }
 
-async function loadDefaultImages() {
-    const defaultPaths = ['assets/catie.jpg', 'assets/chloe.png'];
-    try {
-        state.slides = [];
-        for (const path of defaultPaths) {
-            const img = await loadImageFromUrl(path);
-            state.slides.push({
-                id: Math.random().toString(36).substr(2, 9),
-                img: img,
-                duration: 1.0
-            });
-        }
-        finishLoading();
-    } catch (err) {
-        console.warn("Could not load default samples:", err);
-    }
+function renderEmptyState() {
+    const dCtx = elements.displayCtx;
+    const dW = elements.displayCanvas.width;
+    const dH = elements.displayCanvas.height;
+    
+    const bgColor = state.inverted ? '#f0f0f0' : '#050505';
+    const textColor = state.inverted ? 'rgba(0,0,0,0.25)' : 'rgba(51,255,51,0.35)';
+    
+    dCtx.fillStyle = bgColor;
+    dCtx.fillRect(0, 0, dW, dH);
+    
+    // Draw centered "Flux-ASCII" title
+    const fontSize = Math.min(dW / 6, dH / 4, 80);
+    dCtx.font = `bold ${fontSize}px 'Fira Code', monospace`;
+    dCtx.fillStyle = textColor;
+    dCtx.textAlign = 'center';
+    dCtx.textBaseline = 'middle';
+    dCtx.fillText('Flux-ASCII', dW / 2, dH / 2);
 }
 
 function finishLoading() {
@@ -264,8 +272,11 @@ function handleResize() {
     const containerH = rect.height;
     
     if (state.images.length === 0) {
-        elements.displayCanvas.width = containerW;
-        elements.displayCanvas.height = containerH;
+        // Make initial canvas square
+        const size = Math.min(containerW, containerH);
+        elements.displayCanvas.width = size;
+        elements.displayCanvas.height = size;
+        renderEmptyState();
         return;
     }
 
@@ -400,8 +411,8 @@ function selectClip(idx) {
     clips.forEach(c => c.classList.remove('selected'));
     if (clips[idx]) clips[idx].classList.add('selected');
     
-    // Enable Toolbar
-    if (elements.clipSettings) {
+    // Enable Toolbar if we have slides
+    if (elements.clipSettings && state.slides.length > 0) {
         elements.clipSettings.style.opacity = '1';
         elements.clipSettings.style.pointerEvents = 'auto';
     }
@@ -414,9 +425,31 @@ function selectClip(idx) {
 }
 
 function deleteSlide(idx) {
-    if (state.slides.length <= 1) return;
+    if (state.slides.length === 0) return;
     
     state.slides.splice(idx, 1);
+    
+    // Handle empty state
+    if (state.slides.length === 0) {
+        state.images = [];
+        state.selectedSlideIndex = -1;
+        state.currentImageIndex = 0;
+        state.nextImageIndex = 0;
+        
+        // Show empty state background
+        renderEmptyState();
+        
+        // Disable toolbar
+        if (elements.clipSettings) {
+            elements.clipSettings.style.opacity = '0.5';
+            elements.clipSettings.style.pointerEvents = 'none';
+        }
+        
+        elements.fileCount.innerText = '0 files loaded';
+        elements.recordBtn.disabled = true;
+        renderTimeline();
+        return;
+    }
     
     if (state.selectedSlideIndex >= state.slides.length) {
         state.selectedSlideIndex = state.slides.length - 1;
