@@ -49,7 +49,7 @@ let state = {
     resolution: 80, // Width in characters
     contrast: 1.0,
     colored: true,
-    inverted: false, // Light mode
+    inverted: true, // Light mode by default
     aspectRatio: 1.0, // width / height
     transitionType: 'fade', // Default
 };
