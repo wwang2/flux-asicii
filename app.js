@@ -12,6 +12,8 @@ const elements = {
     recordingStatus: document.getElementById('recordingStatus'),
     recProgress: document.getElementById('recProgress'),
     transitionSelect: document.getElementById('transitionSelect'),
+    transitionDurRange: document.getElementById('transitionDurRange'),
+    transitionDurVal: document.getElementById('transitionDurVal'),
     speedRange: document.getElementById('speedRange'),
     speedVal: document.getElementById('speedVal'),
     resolutionRange: document.getElementById('resolutionRange'),
@@ -52,7 +54,9 @@ let state = {
     // Animation
     currentImageIndex: 0,
     nextImageIndex: 0,
-    t: 0, 
+    t: 0,              // 0-1 progress through current slide (hold + transition)
+    phase: 'hold',     // 'hold' or 'transition'
+    phaseT: 0,         // 0-1 progress within current phase
     isPlaying: false,
     isRecording: false,
     reqId: null,
@@ -65,6 +69,7 @@ let state = {
     inverted: true,
     aspectRatio: 1.0, 
     transitionType: 'fade',
+    transitionDuration: 0.5, // seconds for transition between images
     
     // Editor State
     zoom: 1.0,
@@ -82,6 +87,11 @@ function init() {
     
     elements.transitionSelect.addEventListener('change', (e) => {
         state.transitionType = e.target.value;
+    });
+
+    elements.transitionDurRange.addEventListener('input', (e) => {
+        state.transitionDuration = parseFloat(e.target.value);
+        elements.transitionDurVal.innerText = state.transitionDuration.toFixed(1) + 's';
     });
 
     elements.speedRange.addEventListener('input', (e) => {
@@ -147,25 +157,27 @@ function init() {
             const val = parseInt(e.target.value);
             if (state.isPlaying) stopAnimation();
             
-            // Convert scrubber 0-1000 to total time
-            const totalDuration = state.slides.reduce((acc, s) => acc + (s.duration || 1.0), 0);
+            // Convert scrubber 0-1000 to total time (hold + transition for each slide)
+            const transDur = state.transitionDuration;
+            const totalDuration = state.slides.reduce((acc, s) => acc + (s.duration || 1.0) + transDur, 0);
             if (totalDuration === 0) return;
             
             const currentTotalProgress = (val / 1000) * totalDuration;
             
-            // Find slide
+            // Find slide and phase
             let timeAccum = 0;
             let foundIdx = 0;
             let localT = 0;
             
             for (let i = 0; i < state.slides.length; i++) {
-                const dur = state.slides[i].duration || 1.0;
-                if (currentTotalProgress <= timeAccum + dur) {
+                const holdDur = state.slides[i].duration || 1.0;
+                const slideTotalDur = holdDur + transDur;
+                if (currentTotalProgress <= timeAccum + slideTotalDur) {
                     foundIdx = i;
-                    localT = (currentTotalProgress - timeAccum) / dur;
+                    localT = (currentTotalProgress - timeAccum) / slideTotalDur;
                     break;
                 }
-                timeAccum += dur;
+                timeAccum += slideTotalDur;
             }
             
             if (val === 1000) {
@@ -176,6 +188,17 @@ function init() {
             state.currentImageIndex = foundIdx;
             state.nextImageIndex = (foundIdx + 1) % state.slides.length;
             state.t = localT;
+            
+            // Determine phase and phaseT
+            const holdDur = state.slides[foundIdx].duration || 1.0;
+            const holdRatio = holdDur / (holdDur + transDur);
+            if (state.t < holdRatio) {
+                state.phase = 'hold';
+                state.phaseT = state.t / holdRatio;
+            } else {
+                state.phase = 'transition';
+                state.phaseT = (state.t - holdRatio) / (1 - holdRatio);
+            }
             
             // Select clip corresponding to scrubber position if user scrubs
             selectClip(foundIdx);
@@ -415,6 +438,8 @@ function jumpToClip(idx) {
     state.currentImageIndex = idx;
     state.nextImageIndex = (idx + 1) % state.slides.length;
     state.t = 0;
+    state.phase = 'hold';
+    state.phaseT = 0;
     renderFrame();
     updateScrubberFromState();
 }
@@ -454,15 +479,17 @@ function updateScrubberFromState() {
     if (state.slides.length < 1) return;
     if (!elements.timelineScrubber) return;
     
-    const totalDuration = state.slides.reduce((acc, s) => acc + (s.duration || 1.0), 0);
+    const transDur = state.transitionDuration;
+    const totalDuration = state.slides.reduce((acc, s) => acc + (s.duration || 1.0) + transDur, 0);
     
     let timeAccum = 0;
     for (let i = 0; i < state.currentImageIndex; i++) {
-        timeAccum += (state.slides[i].duration || 1.0);
+        timeAccum += (state.slides[i].duration || 1.0) + transDur;
     }
     
-    const currentDur = state.slides[state.currentImageIndex].duration || 1.0;
-    timeAccum += state.t * currentDur;
+    const holdDur = state.slides[state.currentImageIndex].duration || 1.0;
+    const slideTotalDur = holdDur + transDur;
+    timeAccum += state.t * slideTotalDur;
     
     const totalProgress = timeAccum / totalDuration;
     
@@ -525,22 +552,34 @@ let lastTime = 0;
 function animate(timestamp) {
     if (!state.isPlaying) return;
     
-    const dt = (timestamp - lastTime) / 1000;
+    const dt = (timestamp - lastTime) / 1000 * state.speed;
     lastTime = timestamp;
     
-    const currentDur = state.slides[state.currentImageIndex].duration || 1.0;
-    const speedFactor = (0.5 * state.speed) / currentDur;
+    const holdDur = state.slides[state.currentImageIndex].duration || 1.0;
+    const transDur = state.transitionDuration;
+    const totalDur = holdDur + transDur;
     
-    state.t += speedFactor * dt;
+    // Advance time
+    state.t += dt / totalDur;
     
     if (state.t >= 1.0) {
         state.t %= 1.0;
         state.currentImageIndex = state.nextImageIndex;
         state.nextImageIndex = (state.currentImageIndex + 1) % state.slides.length;
+        state.phase = 'hold';
+        state.phaseT = 0;
         
-        // Auto-select active clip during playback?
-        // Maybe distracting if controls flash, but keeps UI sync
         selectClip(state.currentImageIndex);
+    }
+    
+    // Determine phase and phaseT
+    const holdRatio = holdDur / totalDur;
+    if (state.t < holdRatio) {
+        state.phase = 'hold';
+        state.phaseT = state.t / holdRatio;
+    } else {
+        state.phase = 'transition';
+        state.phaseT = (state.t - holdRatio) / (1 - holdRatio);
     }
     
     renderFrame();
@@ -585,44 +624,52 @@ function renderFrame() {
     const contrast = state.contrast;
     const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
     
+    // During 'hold' phase, show static image (alpha=0)
+    // During 'transition' phase, blend based on phaseT
+    const transT = state.phase === 'hold' ? 0 : state.phaseT;
+    
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
             const i = (y * w + x) * 4;
             
             let alpha = 0; 
             
-            switch (state.transitionType) {
-                case 'fade':
-                    alpha = state.t;
-                    break;
+            if (state.phase === 'hold') {
+                alpha = 0; // Show only img1
+            } else {
+                switch (state.transitionType) {
+                    case 'fade':
+                        alpha = transT;
+                        break;
+                        
+                    case 'wipe':
+                        const limit = transT * 1.4 - 0.2;
+                        const v = x / w;
+                        alpha = 1.0 - Math.min(Math.max((v - limit) / 0.2, 0), 1);
+                        break;
+                        
+                    case 'dissolve':
+                        const noise = pseudoRandom(x, y);
+                        const threshold = transT;
+                        alpha = Math.min(Math.max((threshold - noise) / 0.1 + 0.5, 0), 1);
+                        break;
                     
-                case 'wipe':
-                    const limit = state.t * 1.4 - 0.2;
-                    const v = x / w;
-                    alpha = 1.0 - Math.min(Math.max((v - limit) / 0.2, 0), 1);
-                    break;
-                    
-                case 'dissolve':
-                    const noise = pseudoRandom(x, y);
-                    const threshold = state.t;
-                    alpha = Math.min(Math.max((threshold - noise) / 0.1 + 0.5, 0), 1);
-                    break;
-                
-                case 'venetian':
-                    const bands = 10;
-                    const bandH = h / bands;
-                    const bandY = y % bandH;
-                    const bandLimit = state.t * bandH;
-                    if (bandY < bandLimit) alpha = 1;
-                    else alpha = 0;
-                    break;
-                    
-                case 'flash':
-                    alpha = state.t;
-                    break;
-                    
-                default:
-                    alpha = state.t;
+                    case 'venetian':
+                        const bands = 10;
+                        const bandH = h / bands;
+                        const bandY = y % bandH;
+                        const bandLimit = transT * bandH;
+                        if (bandY < bandLimit) alpha = 1;
+                        else alpha = 0;
+                        break;
+                        
+                    case 'flash':
+                        alpha = transT;
+                        break;
+                        
+                    default:
+                        alpha = transT;
+                }
             }
             
             const r1 = img1.data[i];
@@ -637,8 +684,8 @@ function renderFrame() {
             let g = g1 + (g2 - g1) * alpha;
             let b = b1 + (b2 - b1) * alpha;
 
-            if (state.transitionType === 'flash') {
-                const flash = Math.max(0, 1 - Math.abs(state.t - 0.5) * 4);
+            if (state.phase === 'transition' && state.transitionType === 'flash') {
+                const flash = Math.max(0, 1 - Math.abs(transT - 0.5) * 4);
                 if (flash > 0) {
                     const flashColor = 255;
                     r = r + (flashColor - r) * flash;
@@ -706,18 +753,32 @@ async function startRecording() {
     
     const gifFPS = 20; 
     const frameDelay = 1000 / gifFPS;
+    const transDur = state.transitionDuration;
     
     let tasks = [];
     
     for (let i = 0; i < state.slides.length; i++) {
-        const dur = state.slides[i].duration || 1.0;
-        const seconds = (dur * 2.0) / state.speed;
+        const holdDur = state.slides[i].duration || 1.0;
+        const totalSlideDur = holdDur + transDur;
+        const seconds = totalSlideDur / state.speed;
         const frames = Math.max(2, Math.round(seconds * gifFPS));
+        const holdRatio = holdDur / totalSlideDur;
         
         for (let f = 0; f < frames; f++) {
+            const t = f / frames;
+            let phase, phaseT;
+            if (t < holdRatio) {
+                phase = 'hold';
+                phaseT = t / holdRatio;
+            } else {
+                phase = 'transition';
+                phaseT = (t - holdRatio) / (1 - holdRatio);
+            }
             tasks.push({
                 idx: i,
-                t: f / frames
+                t: t,
+                phase: phase,
+                phaseT: phaseT
             });
         }
     }
@@ -733,6 +794,8 @@ async function startRecording() {
         state.currentImageIndex = task.idx;
         state.nextImageIndex = (task.idx + 1) % state.slides.length;
         state.t = task.t;
+        state.phase = task.phase;
+        state.phaseT = task.phaseT;
         
         renderFrame();
         gif.addFrame(elements.displayCanvas, {copy: true, delay: frameDelay});
