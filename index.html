@@ -30,7 +30,7 @@
         </div>
 
         <div class="control-group">
-            <label>Transition</label>
+            <label for="transitionSelect">Transition</label>
             <select id="transitionSelect">
                 <option value="fade">Crossfade</option>
                 <option value="wipe">Scan Wipe</option>
@@ -41,22 +41,22 @@
         </div>
 
         <div class="control-group">
-            <label>Transition Time <span id="transitionDurVal">0.5s</span></label>
+            <label for="transitionDurRange">Transition Time <span id="transitionDurVal">0.5s</span></label>
             <input type="range" id="transitionDurRange" min="0.1" max="2.0" step="0.1" value="0.5">
         </div>
 
         <div class="control-group">
-            <label>Speed <span id="speedVal">1.0x</span></label>
+            <label for="speedRange">Speed <span id="speedVal">1.0x</span></label>
             <input type="range" id="speedRange" min="0.1" max="5.0" step="0.1" value="1.0">
         </div>
 
         <div class="control-group">
-            <label>Resolution <span id="resVal">80 chars</span></label>
+            <label for="resolutionRange">Resolution <span id="resVal">80 chars</span></label>
             <input type="range" id="resolutionRange" min="40" max="200" step="1" value="80">
         </div>
 
         <div class="control-group">
-            <label>Contrast <span id="contrastVal">1.0</span></label>
+            <label for="contrastRange">Contrast <span id="contrastVal">1.0</span></label>
             <input type="range" id="contrastRange" min="0.5" max="3.0" step="0.1" value="1.0">
         </div>
 
@@ -86,21 +86,21 @@
             <div class="editor-toolbar">
                 <div class="toolbar-left">
                     <span class="toolbar-label">Timeline</span>
-                    <button id="addSlideBtn" class="tool-btn" title="Add Images">+</button>
+                    <button id="addSlideBtn" class="tool-btn" title="Add Images" aria-label="Add Images">+</button>
                 </div>
                 
                 <div class="toolbar-center" id="clipSettings" style="opacity: 0.5; pointer-events: none;">
                     <span class="toolbar-label">Selected Clip:</span>
                     <div class="duration-control">
-                        <label>Duration</label>
+                        <label for="slideDuration">Duration</label>
                         <input type="range" id="slideDuration" min="0.2" max="5.0" step="0.1" value="1.0">
                         <span id="slideDurationVal">1.0s</span>
                     </div>
-                    <button id="deleteSlideBtn" class="tool-btn danger" title="Delete Clip">🗑</button>
+                    <button id="deleteSlideBtn" class="tool-btn danger" title="Delete Clip" aria-label="Delete Clip">🗑</button>
                 </div>
 
                 <div class="toolbar-right">
-                    <label>Zoom</label>
+                    <label for="timelineZoom">Zoom</label>
                     <input type="range" id="timelineZoom" min="1" max="3" step="0.1" value="1">
                 </div>
             </div>
