@@ -100,6 +100,49 @@ function init() {
     
     // Initial resize to set canvas defaults
     handleResize();
+    
+    // Load default images
+    loadDefaultImages();
+}
+
+async function loadDefaultImages() {
+    const defaultPaths = ['assets/catie.jpg', 'assets/chloe.png'];
+    try {
+        state.originalImages = [];
+        for (const path of defaultPaths) {
+            const img = await loadImageFromUrl(path);
+            state.originalImages.push(img);
+        }
+        
+        if (state.originalImages.length > 0) {
+            const first = state.originalImages[0];
+            state.aspectRatio = first.width / first.height;
+            elements.fileCount.innerText = "Loaded sample images";
+            elements.recordBtn.disabled = false;
+            
+            prepareImages();
+            
+            state.currentImageIndex = 0;
+            state.nextImageIndex = (state.originalImages.length > 1) ? 1 : 0;
+            state.t = 0;
+            renderFrame();
+            
+            // Auto-play for samples? Maybe just show first frame
+            // togglePlay(); 
+        }
+    } catch (err) {
+        console.warn("Could not load default samples:", err);
+    }
+}
+
+function loadImageFromUrl(url) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "Anonymous"; // Good practice for canvas
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = url;
+    });
 }
 
 function handleResize() {
