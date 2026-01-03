@@ -68,6 +68,19 @@
         </div>
     </div>
 
+    <!-- Image Gallery & Timeline -->
+    <div class="gallery-container">
+        <div class="gallery-header">
+            <span>Sequence</span>
+            <span class="hint">(Drag to reorder)</span>
+        </div>
+        <div id="imageGallery" class="image-gallery"></div>
+        <div class="timeline-controls">
+            <label>Timeline <span id="timelineVal">0%</span></label>
+            <input type="range" id="timelineScrubber" min="0" max="1000" value="0" step="1">
+        </div>
+    </div>
+
     <div class="ascii-container" id="asciiContainer">
         <!-- Main display canvas -->
         <canvas id="displayCanvas"></canvas>

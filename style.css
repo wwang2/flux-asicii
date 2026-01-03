@@ -27,8 +27,7 @@ body {
     transition: background-color 0.3s, color 0.3s;
 }
 
-/* CRT Overlay Effects - Dim them in light mode or remove? 
-   Usually CRT is for dark terminals. We'll reduce opacity. */
+/* CRT Overlay Effects */
 .crt-overlay {
     position: fixed;
     top: 0;
@@ -90,8 +89,6 @@ body.light-mode .scanline {
     transition: opacity 0.3s, background 0.3s, border-color 0.3s;
 }
 
-/* ... existing styles ... */
-
 .controls:hover {
     opacity: 1;
 }
@@ -101,12 +98,12 @@ body.light-mode .scanline {
     font-size: 1.5rem;
     text-transform: uppercase;
     letter-spacing: 2px;
-    text-shadow: 0 0 5px var(--term-color); /* This might look weird in black on white? */
+    text-shadow: 0 0 5px var(--term-color);
     margin-bottom: 20px;
 }
 
 body.light-mode .controls h1 {
-    text-shadow: none; /* Clean look for light mode */
+    text-shadow: none;
 }
 
 .control-group {
@@ -241,6 +238,74 @@ body.light-mode input[type="range"]::-webkit-slider-runnable-track {
     background: #ccc;
 }
 
+/* Gallery & Timeline */
+.gallery-container {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    right: 20px;
+    background: var(--ui-bg);
+    border: 1px solid var(--ui-border);
+    padding: 15px;
+    border-radius: 8px;
+    z-index: 20;
+    backdrop-filter: blur(5px);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    max-height: 200px;
+}
+
+.gallery-header {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    color: var(--term-color);
+}
+
+.image-gallery {
+    display: flex;
+    gap: 10px;
+    overflow-x: auto;
+    padding-bottom: 5px;
+    scrollbar-width: thin;
+    scrollbar-color: var(--term-color) transparent;
+}
+
+.gallery-item {
+    width: 60px;
+    height: 60px;
+    object-fit: cover;
+    border: 2px solid transparent;
+    border-radius: 4px;
+    cursor: grab;
+    transition: transform 0.2s, border-color 0.2s;
+    opacity: 0.6;
+}
+
+.gallery-item.active {
+    border-color: var(--term-color);
+    opacity: 1;
+    transform: scale(1.05);
+}
+
+.gallery-item:active {
+    cursor: grabbing;
+}
+
+.timeline-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+}
+
+.timeline-controls label {
+    white-space: nowrap;
+}
+
 /* ASCII Output - Canvas */
 .ascii-container {
     flex: 1;
@@ -252,6 +317,7 @@ body.light-mode input[type="range"]::-webkit-slider-runnable-track {
     width: 100%;
     height: 100%;
     padding: 20px; 
+    padding-bottom: 180px; /* Space for gallery */
     box-sizing: border-box;
 }
 
@@ -260,22 +326,18 @@ body.light-mode input[type="range"]::-webkit-slider-runnable-track {
     max-height: 100%;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
     
-    /* Default dark mode bloom */
     filter: contrast(1.1) brightness(1.2) drop-shadow(0 0 4px rgba(51, 255, 51, 0.3));
 }
 
 body.light-mode #displayCanvas {
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
-    /* Clean look for light mode, remove bloom or make it subtle */
     filter: none;
 }
 
 .mono-mode #displayCanvas {
-    /* If mono (dark mode), simpler look */
     filter: contrast(1.2) sepia(1) hue-rotate(80deg) saturate(3);
 }
 
 body.light-mode.mono-mode #displayCanvas {
-    /* Mono light mode (black text on white) */
     filter: contrast(1.2);
 }

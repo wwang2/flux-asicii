@@ -24,7 +24,12 @@ const elements = {
     displayCanvas: document.getElementById('displayCanvas'),
     displayCtx: document.getElementById('displayCanvas').getContext('2d'),
     processCanvas: document.getElementById('processCanvas'),
-    processCtx: document.getElementById('processCanvas').getContext('2d', { willReadFrequently: true })
+    processCtx: document.getElementById('processCanvas').getContext('2d', { willReadFrequently: true }),
+    
+    // Gallery & Timeline
+    imageGallery: document.getElementById('imageGallery'),
+    timelineScrubber: document.getElementById('timelineScrubber'),
+    timelineVal: document.getElementById('timelineVal')
 };
 
 // Application State
@@ -97,6 +102,33 @@ function init() {
         }
         if (!state.isPlaying) renderFrame();
     });
+
+    elements.timelineScrubber.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value);
+        elements.timelineVal.innerText = (val / 10).toFixed(0) + '%';
+        
+        // Pause if playing when scrubbing
+        if (state.isPlaying) stopAnimation();
+        
+        // Calculate precise position
+        const totalImages = state.images.length;
+        if (totalImages < 1) return;
+        
+        // 0 to 1000 represents full loop
+        const totalProgress = val / 1000;
+        const totalSteps = totalImages; // number of transitions
+        const absolutePos = totalProgress * totalSteps;
+        
+        const index = Math.floor(absolutePos) % totalImages;
+        const fraction = absolutePos % 1;
+        
+        state.currentImageIndex = index;
+        state.nextImageIndex = (index + 1) % totalImages;
+        state.t = fraction;
+        
+        renderFrame();
+        updateGalleryHighlight();
+    });
     
     // Initial resize to set canvas defaults
     handleResize();
@@ -121,14 +153,12 @@ async function loadDefaultImages() {
             elements.recordBtn.disabled = false;
             
             prepareImages();
+            renderGallery();
             
             state.currentImageIndex = 0;
             state.nextImageIndex = (state.originalImages.length > 1) ? 1 : 0;
             state.t = 0;
             renderFrame();
-            
-            // Auto-play for samples? Maybe just show first frame
-            // togglePlay(); 
         }
     } catch (err) {
         console.warn("Could not load default samples:", err);
@@ -147,8 +177,9 @@ function loadImageFromUrl(url) {
 
 function handleResize() {
     const rect = elements.container.getBoundingClientRect();
-    const containerW = rect.width;
-    const containerH = rect.height;
+    // Account for padding
+    const containerW = rect.width - 40; 
+    const containerH = rect.height - 40; // Reduced height due to gallery panel, style updated
     
     // Default to container size if no images
     if (state.images.length === 0) {
@@ -192,6 +223,7 @@ async function handleFileUpload(e) {
     
     elements.fileCount.innerText = "Loading...";
     
+    // Replace logic: start fresh
     state.originalImages = [];
     files.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -210,6 +242,7 @@ async function handleFileUpload(e) {
             elements.recordBtn.disabled = false;
             
             prepareImages();
+            renderGallery();
             
             // Auto start if user wants? Or just show first frame
             state.currentImageIndex = 0;
@@ -235,6 +268,108 @@ function loadImage(file) {
         reader.readAsDataURL(file);
     });
 }
+
+// --- Gallery Logic ---
+
+function renderGallery() {
+    elements.imageGallery.innerHTML = '';
+    
+    state.originalImages.forEach((img, idx) => {
+        const thumb = document.createElement('img');
+        thumb.src = img.src;
+        thumb.className = 'gallery-item';
+        thumb.draggable = true;
+        thumb.dataset.index = idx;
+        
+        // Drag Events
+        thumb.addEventListener('dragstart', handleDragStart);
+        thumb.addEventListener('dragover', handleDragOver);
+        thumb.addEventListener('drop', handleDrop);
+        
+        // Click to jump
+        thumb.addEventListener('click', () => jumpToImage(idx));
+        
+        elements.imageGallery.appendChild(thumb);
+    });
+    
+    updateGalleryHighlight();
+}
+
+function jumpToImage(idx) {
+    stopAnimation();
+    state.currentImageIndex = idx;
+    state.nextImageIndex = (idx + 1) % state.images.length;
+    state.t = 0;
+    renderFrame();
+    updateTimelineFromState();
+}
+
+let draggedItem = null;
+
+function handleDragStart(e) {
+    draggedItem = this;
+    e.dataTransfer.effectAllowed = 'move';
+}
+
+function handleDragOver(e) {
+    if (e.preventDefault) {
+        e.preventDefault(); 
+    }
+    e.dataTransfer.dropEffect = 'move';
+    return false;
+}
+
+function handleDrop(e) {
+    if (e.stopPropagation) {
+        e.stopPropagation(); 
+    }
+    
+    if (draggedItem !== this) {
+        const oldIdx = parseInt(draggedItem.dataset.index);
+        const newIdx = parseInt(this.dataset.index);
+        
+        // Reorder array
+        const item = state.originalImages.splice(oldIdx, 1)[0];
+        state.originalImages.splice(newIdx, 0, item);
+        
+        // Reprocess
+        prepareImages();
+        renderGallery();
+        
+        // Reset view
+        state.currentImageIndex = 0;
+        state.nextImageIndex = (state.originalImages.length > 1) ? 1 : 0;
+        state.t = 0;
+        renderFrame();
+    }
+    
+    return false;
+}
+
+function updateGalleryHighlight() {
+    const thumbs = document.querySelectorAll('.gallery-item');
+    thumbs.forEach(t => t.classList.remove('active'));
+    if (thumbs[state.currentImageIndex]) {
+        thumbs[state.currentImageIndex].classList.add('active');
+    }
+}
+
+function updateTimelineFromState() {
+    const totalImages = state.images.length;
+    if (totalImages < 1) return;
+    
+    const progressPerImage = 1 / totalImages;
+    const currentBase = state.currentImageIndex * progressPerImage;
+    const currentFraction = state.t * progressPerImage;
+    
+    const totalProgress = currentBase + currentFraction;
+    
+    elements.timelineScrubber.value = Math.round(totalProgress * 1000);
+    elements.timelineVal.innerText = (totalProgress * 100).toFixed(0) + '%';
+    
+    updateGalleryHighlight();
+}
+
 
 // --- Processing ---
 
@@ -318,6 +453,8 @@ function animate(timestamp) {
     }
     
     renderFrame();
+    updateTimelineFromState();
+    
     state.reqId = requestAnimationFrame(animate);
 }
 
