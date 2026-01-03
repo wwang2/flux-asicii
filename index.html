@@ -68,27 +68,51 @@
         </div>
     </div>
 
-    <!-- Image Gallery & Timeline -->
-    <div class="gallery-container">
-        <div class="gallery-header">
-            <span>Sequence</span>
-            <span class="hint">(Drag to reorder)</span>
-        </div>
-        <div id="imageGallery" class="image-gallery"></div>
-        <div class="timeline-controls">
-            <label>Timeline <span id="timelineVal">0%</span></label>
-            <input type="range" id="timelineScrubber" min="0" max="1000" value="0" step="1">
+    <div class="main-layout">
+        <div class="ascii-container" id="asciiContainer">
+            <!-- Main display canvas -->
+            <canvas id="displayCanvas"></canvas>
         </div>
     </div>
 
-    <div class="ascii-container" id="asciiContainer">
-        <!-- Main display canvas -->
-        <canvas id="displayCanvas"></canvas>
-    </div>
+    <!-- Video Editor Timeline (Floating outside main-layout) -->
+    <div class="editor-panel">
+        <!-- Toolbar -->
+            <div class="editor-toolbar">
+                <div class="toolbar-left">
+                    <span class="toolbar-label">Timeline</span>
+                    <button id="addSlideBtn" class="tool-btn" title="Add Images">+</button>
+                </div>
+                
+                <div class="toolbar-center" id="clipSettings" style="opacity: 0.5; pointer-events: none;">
+                    <span class="toolbar-label">Selected Clip:</span>
+                    <div class="duration-control">
+                        <label>Duration</label>
+                        <input type="range" id="slideDuration" min="0.2" max="5.0" step="0.1" value="1.0">
+                        <span id="slideDurationVal">1.0s</span>
+                    </div>
+                    <button id="deleteSlideBtn" class="tool-btn danger" title="Delete Clip">🗑</button>
+                </div>
+
+                <div class="toolbar-right">
+                    <label>Zoom</label>
+                    <input type="range" id="timelineZoom" min="1" max="3" step="0.1" value="1">
+                </div>
+            </div>
+
+            <!-- Track Area -->
+            <div class="timeline-track-area">
+                <div id="timelineTrack" class="timeline-track"></div>
+                <!-- Global Scrubber Overlay -->
+                <div class="scrubber-overlay">
+                    <input type="range" id="timelineScrubber" min="0" max="1000" value="0" step="1">
+                </div>
+            </div>
+        </div>
 
     <!-- Hidden canvas for pixel processing -->
     <canvas id="processCanvas" style="display: none;"></canvas>
-
+    
     <script src="app.js"></script>
 </body>
 </html>

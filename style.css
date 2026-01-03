@@ -1,17 +1,21 @@
 :root {
     --bg-color: #050505;
     --term-color: #33ff33; /* Default green terminal */
-    --ui-bg: rgba(0, 0, 0, 0.85);
+    --ui-bg: rgba(0, 0, 0, 0.9);
     --ui-border: #333;
     --font-stack: 'Fira Code', 'Courier New', Courier, monospace;
+    --accent-color: #33ff33;
+    --danger-color: #ff4444;
 }
 
 /* Light Theme Variables */
 body.light-mode {
     --bg-color: #f0f0f0;
     --term-color: #000000;
-    --ui-bg: rgba(255, 255, 255, 0.85);
+    --ui-bg: rgba(255, 255, 255, 0.95);
     --ui-border: #ccc;
+    --accent-color: #0066ff;
+    --danger-color: #ff0000;
 }
 
 body {
@@ -48,9 +52,7 @@ body {
     z-index: 10;
 }
 
-body.light-mode .crt-overlay {
-    opacity: 0.3; /* Make it subtle */
-}
+body.light-mode .crt-overlay { opacity: 0.15; }
 
 .scanline {
     width: 100%;
@@ -89,9 +91,7 @@ body.light-mode .scanline {
     transition: opacity 0.3s, background 0.3s, border-color 0.3s;
 }
 
-.controls:hover {
-    opacity: 1;
-}
+.controls:hover { opacity: 1; }
 
 .controls h1 {
     margin-top: 0;
@@ -102,9 +102,7 @@ body.light-mode .scanline {
     margin-bottom: 20px;
 }
 
-body.light-mode .controls h1 {
-    text-shadow: none;
-}
+body.light-mode .controls h1 { text-shadow: none; }
 
 .control-group {
     margin-bottom: 15px;
@@ -125,13 +123,9 @@ body.light-mode .controls h1 {
     gap: 10px;
 }
 
-.btn-row button {
-    flex: 1;
-}
+.btn-row button { flex: 1; }
 
-input[type="file"] {
-    display: none;
-}
+input[type="file"] { display: none; }
 
 .file-upload-btn {
     border: 1px solid var(--term-color);
@@ -142,10 +136,7 @@ input[type="file"] {
     background: rgba(0, 255, 0, 0.1);
 }
 
-body.light-mode .file-upload-btn {
-    background: rgba(0, 0, 0, 0.05);
-}
-
+body.light-mode .file-upload-btn { background: rgba(0, 0, 0, 0.05); }
 .file-upload-btn:hover {
     background: var(--term-color);
     color: var(--bg-color);
@@ -234,76 +225,17 @@ input[type="range"]::-webkit-slider-runnable-track {
     background: #333;
 }
 
-body.light-mode input[type="range"]::-webkit-slider-runnable-track {
-    background: #ccc;
-}
+body.light-mode input[type="range"]::-webkit-slider-runnable-track { background: #ccc; }
 
-/* Gallery & Timeline */
-.gallery-container {
-    position: absolute;
-    bottom: 20px;
-    left: 20px;
-    right: 20px;
-    background: var(--ui-bg);
-    border: 1px solid var(--ui-border);
-    padding: 15px;
-    border-radius: 8px;
-    z-index: 20;
-    backdrop-filter: blur(5px);
+/* Layout */
+.main-layout {
+    flex: 1;
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    max-height: 200px;
-}
-
-.gallery-header {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-    color: var(--term-color);
-}
-
-.image-gallery {
-    display: flex;
-    gap: 10px;
-    overflow-x: auto;
-    padding-bottom: 5px;
-    scrollbar-width: thin;
-    scrollbar-color: var(--term-color) transparent;
-}
-
-.gallery-item {
-    width: 60px;
-    height: 60px;
-    object-fit: cover;
-    border: 2px solid transparent;
-    border-radius: 4px;
-    cursor: grab;
-    transition: transform 0.2s, border-color 0.2s;
-    opacity: 0.6;
-}
-
-.gallery-item.active {
-    border-color: var(--term-color);
-    opacity: 1;
-    transform: scale(1.05);
-}
-
-.gallery-item:active {
-    cursor: grabbing;
-}
-
-.timeline-controls {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 0.8rem;
-    text-transform: uppercase;
-}
-
-.timeline-controls label {
-    white-space: nowrap;
+    width: 100%;
+    height: 100vh;
+    padding-left: 0; /* Remove padding to center canvas on screen */
+    box-sizing: border-box;
 }
 
 /* ASCII Output - Canvas */
@@ -315,9 +247,8 @@ body.light-mode input[type="range"]::-webkit-slider-runnable-track {
     overflow: hidden;
     position: relative;
     width: 100%;
-    height: 100%;
-    padding: 20px; 
-    padding-bottom: 180px; /* Space for gallery */
+    padding: 20px;
+    padding-bottom: 220px; /* Space for floating editor */
     box-sizing: border-box;
 }
 
@@ -325,7 +256,6 @@ body.light-mode input[type="range"]::-webkit-slider-runnable-track {
     max-width: 100%;
     max-height: 100%;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
-    
     filter: contrast(1.1) brightness(1.2) drop-shadow(0 0 4px rgba(51, 255, 51, 0.3));
 }
 
@@ -338,6 +268,184 @@ body.light-mode #displayCanvas {
     filter: contrast(1.2) sepia(1) hue-rotate(80deg) saturate(3);
 }
 
-body.light-mode.mono-mode #displayCanvas {
-    filter: contrast(1.2);
+body.light-mode.mono-mode #displayCanvas { filter: contrast(1.2); }
+
+/* Video Editor Panel - Floating Centered */
+.editor-panel {
+    position: fixed;
+    bottom: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80%;
+    max-width: 900px;
+    height: 180px;
+    background: var(--ui-bg);
+    border: 1px solid var(--ui-border);
+    display: flex;
+    flex-direction: column;
+    z-index: 30;
+    backdrop-filter: blur(10px);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+/* Toolbar */
+.editor-toolbar {
+    height: 40px;
+    border-bottom: 1px solid var(--ui-border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 15px;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    background: rgba(0,0,0,0.05);
+}
+
+.toolbar-left, .toolbar-center, .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+}
+
+.toolbar-center {
+    flex: 1;
+    justify-content: center;
+    border-left: 1px solid var(--ui-border);
+    border-right: 1px solid var(--ui-border);
+    margin: 0 15px;
+    padding: 0 15px;
+}
+
+.duration-control {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 200px;
+}
+
+.tool-btn {
+    border: 1px solid var(--ui-border);
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    padding: 0;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.tool-btn.danger {
+    color: var(--danger-color);
+    border-color: var(--danger-color);
+}
+.tool-btn.danger:hover {
+    background: var(--danger-color);
+    color: white;
+}
+
+/* Track Area */
+.timeline-track-area {
+    flex: 1;
+    position: relative;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 15px;
+    background: rgba(0,0,0,0.2);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+body.light-mode .timeline-track-area { background: rgba(0,0,0,0.02); }
+
+.timeline-track {
+    display: flex;
+    gap: 2px;
+    height: 100px;
+    min-width: 0; 
+    position: relative;
+}
+
+.track-clip {
+    height: 100%;
+    background: #222;
+    border: 1px solid #444;
+    border-radius: 4px;
+    position: relative;
+    cursor: pointer;
+    overflow: hidden;
+    transition: all 0.1s;
+    user-select: none;
+    min-width: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+body.light-mode .track-clip {
+    background: #fff;
+    border-color: #ddd;
+}
+
+.track-clip.selected {
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 2px var(--accent-color) inset;
+    background: rgba(51, 255, 51, 0.1);
+}
+
+body.light-mode .track-clip.selected {
+    background: rgba(0, 102, 255, 0.1);
+}
+
+.clip-thumb {
+    height: 100%;
+    width: 100%;
+    object-fit: cover;
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.track-clip.selected .clip-thumb { opacity: 0.8; }
+
+.clip-label {
+    position: absolute;
+    bottom: 5px;
+    right: 5px;
+    font-size: 0.7rem;
+    background: rgba(0,0,0,0.7);
+    color: white;
+    padding: 2px 4px;
+    border-radius: 3px;
+    pointer-events: none;
+}
+
+/* Scrubber Overlay */
+.scrubber-overlay {
+    position: absolute;
+    top: 0;
+    left: 15px;
+    right: 15px;
+    height: 100%;
+    pointer-events: none;
+    display: flex;
+    justify-content: center;
+}
+
+#timelineScrubber {
+    pointer-events: auto;
+    position: absolute;
+    bottom: 0;
+    width: 100%;
+    margin: 0;
+    opacity: 0.5;
+}
+
+#timelineScrubber::-webkit-slider-thumb {
+    height: 100%;
+    margin-top: -5px;
 }

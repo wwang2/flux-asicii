@@ -20,22 +20,30 @@ const elements = {
     contrastVal: document.getElementById('contrastVal'),
     colorToggle: document.getElementById('colorToggle'),
     invertToggle: document.getElementById('invertToggle'),
+    
     container: document.getElementById('asciiContainer'),
     displayCanvas: document.getElementById('displayCanvas'),
     displayCtx: document.getElementById('displayCanvas').getContext('2d'),
     processCanvas: document.getElementById('processCanvas'),
     processCtx: document.getElementById('processCanvas').getContext('2d', { willReadFrequently: true }),
     
-    // Gallery & Timeline
-    imageGallery: document.getElementById('imageGallery'),
+    // Timeline Editor Elements
+    timelineTrack: document.getElementById('timelineTrack'),
     timelineScrubber: document.getElementById('timelineScrubber'),
-    timelineVal: document.getElementById('timelineVal')
+    timelineZoom: document.getElementById('timelineZoom'),
+    
+    // Toolbar Elements
+    addSlideBtn: document.getElementById('addSlideBtn'),
+    clipSettings: document.getElementById('clipSettings'),
+    slideDuration: document.getElementById('slideDuration'),
+    slideDurationVal: document.getElementById('slideDurationVal'),
+    deleteSlideBtn: document.getElementById('deleteSlideBtn'),
 };
 
 // Application State
 let state = {
+    slides: [], // { id, img, duration }
     images: [], // { data: Uint8ClampedArray, width, height }
-    originalImages: [], // Image objects
     
     // Grid dimensions
     gridW: 0,
@@ -44,19 +52,23 @@ let state = {
     // Animation
     currentImageIndex: 0,
     nextImageIndex: 0,
-    t: 0, // Interpolation factor 0.0 -> 1.0
+    t: 0, 
     isPlaying: false,
     isRecording: false,
     reqId: null,
     
     // Settings
-    speed: 1.0,     // Transition speed multiplier
-    resolution: 80, // Width in characters
+    speed: 1.0,     
+    resolution: 80, 
     contrast: 1.0,
     colored: true,
-    inverted: true, // Light mode by default
-    aspectRatio: 1.0, // width / height
-    transitionType: 'fade', // Default
+    inverted: true,
+    aspectRatio: 1.0, 
+    transitionType: 'fade',
+    
+    // Editor State
+    zoom: 1.0,
+    selectedSlideIndex: 0
 };
 
 // --- Initialization & Event Listeners ---
@@ -66,6 +78,7 @@ function init() {
     elements.fileInput.addEventListener('change', handleFileUpload);
     elements.playBtn.addEventListener('click', togglePlay);
     elements.recordBtn.addEventListener('click', startRecording);
+    if (elements.addSlideBtn) elements.addSlideBtn.addEventListener('click', () => elements.fileInput.click()); 
     
     elements.transitionSelect.addEventListener('change', (e) => {
         state.transitionType = e.target.value;
@@ -79,13 +92,13 @@ function init() {
     elements.resolutionRange.addEventListener('input', (e) => {
         state.resolution = parseInt(e.target.value);
         elements.resVal.innerText = state.resolution + ' chars';
-        prepareImages(); // Re-scale images to new resolution
+        prepareImages(); 
     });
     
     elements.contrastRange.addEventListener('input', (e) => {
         state.contrast = parseFloat(e.target.value);
         elements.contrastVal.innerText = state.contrast;
-        if (!state.isPlaying) renderFrame(); // Live update if paused
+        if (!state.isPlaying) renderFrame(); 
     });
     
     elements.colorToggle.addEventListener('change', (e) => {
@@ -103,72 +116,119 @@ function init() {
         if (!state.isPlaying) renderFrame();
     });
 
-    elements.timelineScrubber.addEventListener('input', (e) => {
-        const val = parseInt(e.target.value);
-        elements.timelineVal.innerText = (val / 10).toFixed(0) + '%';
-        
-        // Pause if playing when scrubbing
-        if (state.isPlaying) stopAnimation();
-        
-        // Calculate precise position
-        const totalImages = state.images.length;
-        if (totalImages < 1) return;
-        
-        // 0 to 1000 represents full loop
-        const totalProgress = val / 1000;
-        const totalSteps = totalImages; // number of transitions
-        const absolutePos = totalProgress * totalSteps;
-        
-        const index = Math.floor(absolutePos) % totalImages;
-        const fraction = absolutePos % 1;
-        
-        state.currentImageIndex = index;
-        state.nextImageIndex = (index + 1) % totalImages;
-        state.t = fraction;
-        
-        renderFrame();
-        updateGalleryHighlight();
-    });
+    // Editor Logic
+    if (elements.slideDuration) {
+        elements.slideDuration.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            elements.slideDurationVal.innerText = val.toFixed(1) + 's';
+            
+            if (state.slides[state.selectedSlideIndex]) {
+                state.slides[state.selectedSlideIndex].duration = val;
+                renderTimeline(); // Re-render track to show new widths
+            }
+        });
+    }
+
+    if (elements.deleteSlideBtn) {
+        elements.deleteSlideBtn.addEventListener('click', () => {
+            deleteSlide(state.selectedSlideIndex);
+        });
+    }
+
+    if (elements.timelineZoom) {
+        elements.timelineZoom.addEventListener('input', (e) => {
+            state.zoom = parseFloat(e.target.value);
+            renderTimeline();
+        });
+    }
+
+    if (elements.timelineScrubber) {
+        elements.timelineScrubber.addEventListener('input', (e) => {
+            const val = parseInt(e.target.value);
+            if (state.isPlaying) stopAnimation();
+            
+            // Convert scrubber 0-1000 to total time
+            const totalDuration = state.slides.reduce((acc, s) => acc + (s.duration || 1.0), 0);
+            if (totalDuration === 0) return;
+            
+            const currentTotalProgress = (val / 1000) * totalDuration;
+            
+            // Find slide
+            let timeAccum = 0;
+            let foundIdx = 0;
+            let localT = 0;
+            
+            for (let i = 0; i < state.slides.length; i++) {
+                const dur = state.slides[i].duration || 1.0;
+                if (currentTotalProgress <= timeAccum + dur) {
+                    foundIdx = i;
+                    localT = (currentTotalProgress - timeAccum) / dur;
+                    break;
+                }
+                timeAccum += dur;
+            }
+            
+            if (val === 1000) {
+                foundIdx = 0;
+                localT = 0;
+            }
+            
+            state.currentImageIndex = foundIdx;
+            state.nextImageIndex = (foundIdx + 1) % state.slides.length;
+            state.t = localT;
+            
+            // Select clip corresponding to scrubber position if user scrubs
+            selectClip(foundIdx);
+            
+            renderFrame();
+        });
+    }
     
-    // Initial resize to set canvas defaults
     handleResize();
-    
-    // Load default images
     loadDefaultImages();
 }
 
 async function loadDefaultImages() {
     const defaultPaths = ['assets/catie.jpg', 'assets/chloe.png'];
     try {
-        state.originalImages = [];
+        state.slides = [];
         for (const path of defaultPaths) {
             const img = await loadImageFromUrl(path);
-            state.originalImages.push(img);
+            state.slides.push({
+                id: Math.random().toString(36).substr(2, 9),
+                img: img,
+                duration: 1.0
+            });
         }
-        
-        if (state.originalImages.length > 0) {
-            const first = state.originalImages[0];
-            state.aspectRatio = first.width / first.height;
-            elements.fileCount.innerText = "Loaded sample images";
-            elements.recordBtn.disabled = false;
-            
-            prepareImages();
-            renderGallery();
-            
-            state.currentImageIndex = 0;
-            state.nextImageIndex = (state.originalImages.length > 1) ? 1 : 0;
-            state.t = 0;
-            renderFrame();
-        }
+        finishLoading();
     } catch (err) {
         console.warn("Could not load default samples:", err);
+    }
+}
+
+function finishLoading() {
+    if (state.slides.length > 0) {
+        const first = state.slides[0].img;
+        state.aspectRatio = first.width / first.height;
+        elements.fileCount.innerText = `${state.slides.length} images loaded`;
+        elements.recordBtn.disabled = false;
+        
+        prepareImages();
+        renderTimeline();
+        
+        state.currentImageIndex = 0;
+        state.nextImageIndex = (state.slides.length > 1) ? 1 : 0;
+        state.t = 0;
+        
+        selectClip(0);
+        renderFrame();
     }
 }
 
 function loadImageFromUrl(url) {
     return new Promise((resolve, reject) => {
         const img = new Image();
-        img.crossOrigin = "Anonymous"; // Good practice for canvas
+        img.crossOrigin = "Anonymous";
         img.onload = () => resolve(img);
         img.onerror = reject;
         img.src = url;
@@ -177,28 +237,23 @@ function loadImageFromUrl(url) {
 
 function handleResize() {
     const rect = elements.container.getBoundingClientRect();
-    // Account for padding
-    const containerW = rect.width - 40; 
-    const containerH = rect.height - 40; // Reduced height due to gallery panel, style updated
+    const containerW = rect.width; 
+    const containerH = rect.height;
     
-    // Default to container size if no images
     if (state.images.length === 0) {
         elements.displayCanvas.width = containerW;
         elements.displayCanvas.height = containerH;
         return;
     }
 
-    // Use the effective aspect ratio of our grid
     const targetAspect = (state.gridW * 0.6) / state.gridH;
 
     let canvasW, canvasH;
 
     if (containerW / containerH > targetAspect) {
-        // Container is wider than target -> constrain by height
         canvasH = containerH;
         canvasW = containerH * targetAspect;
     } else {
-        // Container is taller than target -> constrain by width
         canvasW = containerW;
         canvasH = containerW / targetAspect;
     }
@@ -215,7 +270,6 @@ async function handleFileUpload(e) {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
-    // Reset State
     stopAnimation();
     state.isPlaying = false;
     elements.playBtn.innerText = "Play";
@@ -223,37 +277,39 @@ async function handleFileUpload(e) {
     
     elements.fileCount.innerText = "Loading...";
     
-    // Replace logic: start fresh
-    state.originalImages = [];
+    // Add to existing? "Video Editor" implies usually adding, but previous behavior was replace.
+    // User requested "Allow showing uploaded images" previously which we did.
+    // Let's stick to "Replace" if using the Main Upload, but "Add" if using timeline "+" button.
+    // But since I bound the "+" button to the same input, let's distinguish?
+    // Actually, simple editor: Append if we have existing slides?
+    // Let's make it APPEND by default now, as that's more editor-like.
+    
+    // state.slides = []; // Commented out to support append
+    if (state.slides.length === 0) state.slides = [];
+    
     files.sort((a, b) => a.name.localeCompare(b.name));
 
     try {
+        const newSlides = [];
         for (const file of files) {
             const img = await loadImage(file);
-            state.originalImages.push(img);
+            newSlides.push({
+                id: Math.random().toString(36).substr(2, 9),
+                img: img,
+                duration: 1.0
+            });
         }
         
-        if (state.originalImages.length > 0) {
-            // Set aspect ratio from the FIRST image
-            const first = state.originalImages[0];
-            state.aspectRatio = first.width / first.height;
-            
-            elements.fileCount.innerText = `${files.length} images loaded`;
-            elements.recordBtn.disabled = false;
-            
-            prepareImages();
-            renderGallery();
-            
-            // Auto start if user wants? Or just show first frame
-            state.currentImageIndex = 0;
-            state.nextImageIndex = (state.originalImages.length > 1) ? 1 : 0;
-            state.t = 0;
-            renderFrame();
-        }
+        state.slides = state.slides.concat(newSlides);
+        
+        finishLoading(); // Re-runs prepareImages
     } catch (err) {
         console.error(err);
         elements.fileCount.innerText = "Error loading images";
     }
+    
+    // Reset input
+    elements.fileInput.value = '';
 }
 
 function loadImage(file) {
@@ -269,133 +325,168 @@ function loadImage(file) {
     });
 }
 
-// --- Gallery Logic ---
+// --- Timeline Editor Logic ---
 
-function renderGallery() {
-    elements.imageGallery.innerHTML = '';
+function renderTimeline() {
+    if (!elements.timelineTrack) return;
+    elements.timelineTrack.innerHTML = '';
     
-    state.originalImages.forEach((img, idx) => {
+    state.slides.forEach((slide, idx) => {
+        const clip = document.createElement('div');
+        clip.className = 'track-clip';
+        if (idx === state.selectedSlideIndex) clip.classList.add('selected');
+        
+        // Width based on duration * zoom
+        const width = (slide.duration || 1.0) * 100 * state.zoom;
+        clip.style.width = `${width}px`;
+        clip.dataset.index = idx;
+        clip.draggable = true;
+        
         const thumb = document.createElement('img');
-        thumb.src = img.src;
-        thumb.className = 'gallery-item';
-        thumb.draggable = true;
-        thumb.dataset.index = idx;
+        thumb.src = slide.img.src;
+        thumb.className = 'clip-thumb';
         
-        // Drag Events
-        thumb.addEventListener('dragstart', handleDragStart);
-        thumb.addEventListener('dragover', handleDragOver);
-        thumb.addEventListener('drop', handleDrop);
+        const label = document.createElement('div');
+        label.className = 'clip-label';
+        label.innerText = (slide.duration || 1.0).toFixed(1) + 's';
         
-        // Click to jump
-        thumb.addEventListener('click', () => jumpToImage(idx));
+        clip.appendChild(thumb);
+        clip.appendChild(label);
         
-        elements.imageGallery.appendChild(thumb);
+        // Events
+        clip.addEventListener('click', (e) => {
+            e.stopPropagation();
+            selectClip(idx);
+            // Jump preview to start of this clip
+            jumpToClip(idx);
+        });
+        
+        clip.addEventListener('dragstart', handleDragStart);
+        clip.addEventListener('dragover', handleDragOver);
+        clip.addEventListener('drop', handleDrop);
+        
+        elements.timelineTrack.appendChild(clip);
     });
-    
-    updateGalleryHighlight();
 }
 
-function jumpToImage(idx) {
+function selectClip(idx) {
+    state.selectedSlideIndex = idx;
+    
+    // Update UI highlights
+    const clips = document.querySelectorAll('.track-clip');
+    clips.forEach(c => c.classList.remove('selected'));
+    if (clips[idx]) clips[idx].classList.add('selected');
+    
+    // Enable Toolbar
+    if (elements.clipSettings) {
+        elements.clipSettings.style.opacity = '1';
+        elements.clipSettings.style.pointerEvents = 'auto';
+    }
+    
+    const slide = state.slides[idx];
+    if (slide) {
+        if (elements.slideDuration) elements.slideDuration.value = slide.duration || 1.0;
+        if (elements.slideDurationVal) elements.slideDurationVal.innerText = (slide.duration || 1.0).toFixed(1) + 's';
+    }
+}
+
+function deleteSlide(idx) {
+    if (state.slides.length <= 1) return;
+    
+    state.slides.splice(idx, 1);
+    
+    if (state.selectedSlideIndex >= state.slides.length) {
+        state.selectedSlideIndex = state.slides.length - 1;
+    }
+    
+    // Fix current playing index if needed
+    if (state.currentImageIndex >= state.slides.length) {
+        state.currentImageIndex = 0;
+    }
+    
+    prepareImages();
+    renderTimeline();
+    selectClip(state.selectedSlideIndex);
+    jumpToClip(state.selectedSlideIndex);
+}
+
+function jumpToClip(idx) {
     stopAnimation();
     state.currentImageIndex = idx;
-    state.nextImageIndex = (idx + 1) % state.images.length;
+    state.nextImageIndex = (idx + 1) % state.slides.length;
     state.t = 0;
     renderFrame();
-    updateTimelineFromState();
+    updateScrubberFromState();
 }
 
-let draggedItem = null;
+// Drag & Drop
+let draggedItemIndex = null;
 
 function handleDragStart(e) {
-    draggedItem = this;
+    draggedItemIndex = parseInt(this.dataset.index);
     e.dataTransfer.effectAllowed = 'move';
 }
 
 function handleDragOver(e) {
-    if (e.preventDefault) {
-        e.preventDefault(); 
-    }
+    e.preventDefault(); 
     e.dataTransfer.dropEffect = 'move';
     return false;
 }
 
 function handleDrop(e) {
-    if (e.stopPropagation) {
-        e.stopPropagation(); 
-    }
-    
-    if (draggedItem !== this) {
-        const oldIdx = parseInt(draggedItem.dataset.index);
-        const newIdx = parseInt(this.dataset.index);
+    e.stopPropagation(); 
+    const targetIdx = parseInt(this.dataset.index);
+    if (draggedItemIndex !== null && draggedItemIndex !== targetIdx) {
+        const item = state.slides.splice(draggedItemIndex, 1)[0];
+        state.slides.splice(targetIdx, 0, item);
         
-        // Reorder array
-        const item = state.originalImages.splice(oldIdx, 1)[0];
-        state.originalImages.splice(newIdx, 0, item);
-        
-        // Reprocess
         prepareImages();
-        renderGallery();
+        renderTimeline();
         
-        // Reset view
-        state.currentImageIndex = 0;
-        state.nextImageIndex = (state.originalImages.length > 1) ? 1 : 0;
-        state.t = 0;
-        renderFrame();
+        // Keep selection on moved item
+        selectClip(targetIdx);
+        jumpToClip(targetIdx);
     }
-    
     return false;
 }
 
-function updateGalleryHighlight() {
-    const thumbs = document.querySelectorAll('.gallery-item');
-    thumbs.forEach(t => t.classList.remove('active'));
-    if (thumbs[state.currentImageIndex]) {
-        thumbs[state.currentImageIndex].classList.add('active');
+function updateScrubberFromState() {
+    if (state.slides.length < 1) return;
+    if (!elements.timelineScrubber) return;
+    
+    const totalDuration = state.slides.reduce((acc, s) => acc + (s.duration || 1.0), 0);
+    
+    let timeAccum = 0;
+    for (let i = 0; i < state.currentImageIndex; i++) {
+        timeAccum += (state.slides[i].duration || 1.0);
     }
-}
-
-function updateTimelineFromState() {
-    const totalImages = state.images.length;
-    if (totalImages < 1) return;
     
-    const progressPerImage = 1 / totalImages;
-    const currentBase = state.currentImageIndex * progressPerImage;
-    const currentFraction = state.t * progressPerImage;
+    const currentDur = state.slides[state.currentImageIndex].duration || 1.0;
+    timeAccum += state.t * currentDur;
     
-    const totalProgress = currentBase + currentFraction;
+    const totalProgress = timeAccum / totalDuration;
     
     elements.timelineScrubber.value = Math.round(totalProgress * 1000);
-    elements.timelineVal.innerText = (totalProgress * 100).toFixed(0) + '%';
-    
-    updateGalleryHighlight();
 }
-
 
 // --- Processing ---
 
 function prepareImages() {
-    if (state.originalImages.length === 0) return;
+    if (state.slides.length === 0) return;
 
-    // 1. Calculate process canvas size
-    // Width is fixed by resolution slider
-    // Height is derived from aspect ratio * char aspect ratio correction
-    // Fonts are usually ~0.6 aspect ratio (width/height)
     const charAspect = 0.6; 
     const w = state.resolution;
     const h = Math.floor(w / state.aspectRatio * charAspect);
 
-    // Save grid dimensions
     state.gridW = w;
     state.gridH = h;
     
     elements.processCanvas.width = w;
     elements.processCanvas.height = h;
 
-    // 2. Process all images into pixel buffers
-    state.images = state.originalImages.map(img => {
-        // Draw image stretched to process canvas size
+    state.images = state.slides.map(slide => {
         elements.processCtx.clearRect(0, 0, w, h);
-        elements.processCtx.drawImage(img, 0, 0, w, h);
+        elements.processCtx.drawImage(slide.img, 0, 0, w, h);
         const imageData = elements.processCtx.getImageData(0, 0, w, h);
         return {
             width: w,
@@ -404,15 +495,13 @@ function prepareImages() {
         };
     });
 
-    // Resize display canvas to match new aspect ratio
     handleResize();
 }
 
 // --- Animation Loop ---
 
 function togglePlay() {
-    if (state.images.length < 2 && !state.isPlaying) return; // Need at least 2 images for transition or just play static?
-    // Actually if only 1 image, 'play' does nothing or loops same image.
+    if (state.slides.length < 2 && !state.isPlaying) return; 
     
     state.isPlaying = !state.isPlaying;
     elements.playBtn.innerText = state.isPlaying ? "Pause" : "Play";
@@ -439,26 +528,29 @@ function animate(timestamp) {
     const dt = (timestamp - lastTime) / 1000;
     lastTime = timestamp;
     
-    // Update logic
-    // Speed 1.0 = 1 full transition in ~2 seconds?
-    // Let's say speed 1.0 => 0.5 units per second
-    const speedFactor = 0.5 * state.speed;
+    const currentDur = state.slides[state.currentImageIndex].duration || 1.0;
+    const speedFactor = (0.5 * state.speed) / currentDur;
     
     state.t += speedFactor * dt;
     
     if (state.t >= 1.0) {
         state.t %= 1.0;
         state.currentImageIndex = state.nextImageIndex;
-        state.nextImageIndex = (state.currentImageIndex + 1) % state.images.length;
+        state.nextImageIndex = (state.currentImageIndex + 1) % state.slides.length;
+        
+        // Auto-select active clip during playback?
+        // Maybe distracting if controls flash, but keeps UI sync
+        selectClip(state.currentImageIndex);
     }
     
     renderFrame();
-    updateTimelineFromState();
+    updateScrubberFromState();
     
     state.reqId = requestAnimationFrame(animate);
 }
 
 // --- Rendering ---
+// (Unchanged from previous simplified version, omitting for brevity in thought process but including in write)
 
 function pseudoRandom(x, y) {
     return ((Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1 + 1) % 1;
@@ -473,20 +565,16 @@ function renderFrame() {
     const w = img1.width;
     const h = img1.height;
     
-    // Display Canvas Setup
     const dCtx = elements.displayCtx;
     const dW = elements.displayCanvas.width;
     const dH = elements.displayCanvas.height;
     
-    // Theme Colors
     const bgColor = state.inverted ? '#ffffff' : '#000000';
     const defaultColor = state.inverted ? '#000000' : '#ffffff'; 
 
-    // Clear background
     dCtx.fillStyle = bgColor;
     dCtx.fillRect(0, 0, dW, dH);
     
-    // Calculate Cell Size
     const cellW = dW / w;
     const cellH = dH / h;
     const fontSize = cellH; 
@@ -494,7 +582,6 @@ function renderFrame() {
     dCtx.font = `${fontSize}px 'Fira Code', monospace`;
     dCtx.textBaseline = 'top';
 
-    // Optimization: renderLoop
     const contrast = state.contrast;
     const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
     
@@ -502,8 +589,7 @@ function renderFrame() {
         for (let x = 0; x < w; x++) {
             const i = (y * w + x) * 4;
             
-            // Calculate Blend Factor (alpha) based on transition type
-            let alpha = 0; // 0 = img1, 1 = img2
+            let alpha = 0; 
             
             switch (state.transitionType) {
                 case 'fade':
@@ -511,51 +597,34 @@ function renderFrame() {
                     break;
                     
                 case 'wipe':
-                    // Scan from left to right with soft edge
-                    // Limit goes from -0.2 to 1.2 to fully clear
                     const limit = state.t * 1.4 - 0.2;
                     const v = x / w;
-                    // Smoothstep manually: clamp((x - edge0) / (edge1 - edge0), 0, 1)
-                    // We want alpha=1 when v < limit.
-                    // Actually, let's say left side is NEW image (alpha=1).
-                    // So if x/w < limit -> 1.
-                    // Soft edge:
                     alpha = 1.0 - Math.min(Math.max((v - limit) / 0.2, 0), 1);
                     break;
                     
                 case 'dissolve':
                     const noise = pseudoRandom(x, y);
-                    // Soft dissolve
-                    // if t > noise, switch.
-                    // blend around threshold
                     const threshold = state.t;
                     alpha = Math.min(Math.max((threshold - noise) / 0.1 + 0.5, 0), 1);
                     break;
                 
                 case 'venetian':
-                    // Horizontal blinds
                     const bands = 10;
                     const bandH = h / bands;
                     const bandY = y % bandH;
                     const bandLimit = state.t * bandH;
-                    // Grow from 0 height to bandH height
                     if (bandY < bandLimit) alpha = 1;
                     else alpha = 0;
-                    // Maybe blend edge
                     break;
                     
                 case 'flash':
-                    // This is handled differently. We blend normally then flash white.
-                    alpha = state.t; // Base fade
-                    // But we modify the final color later.
+                    alpha = state.t;
                     break;
                     
                 default:
                     alpha = state.t;
             }
             
-            // LERP
-            // Get pixels
             const r1 = img1.data[i];
             const g1 = img1.data[i+1];
             const b1 = img1.data[i+2];
@@ -568,10 +637,8 @@ function renderFrame() {
             let g = g1 + (g2 - g1) * alpha;
             let b = b1 + (b2 - b1) * alpha;
 
-            // Handle "Flash" overexposure
             if (state.transitionType === 'flash') {
-                // Peak at 0.5
-                const flash = Math.max(0, 1 - Math.abs(state.t - 0.5) * 4); // sharp peak
+                const flash = Math.max(0, 1 - Math.abs(state.t - 0.5) * 4);
                 if (flash > 0) {
                     const flashColor = 255;
                     r = r + (flashColor - r) * flash;
@@ -580,22 +647,18 @@ function renderFrame() {
                 }
             }
             
-            // Contrast
             if (contrast !== 1.0) {
                 r = factor * (r - 128) + 128;
                 g = factor * (g - 128) + 128;
                 b = factor * (b - 128) + 128;
             }
             
-            // Clamp
             r = r < 0 ? 0 : r > 255 ? 255 : r;
             g = g < 0 ? 0 : g > 255 ? 255 : g;
             b = b < 0 ? 0 : b > 255 ? 255 : b;
             
-            // Luminance
             const lum = (0.299 * r + 0.587 * g + 0.114 * b);
             
-            // Char mapping
             let charIdx;
             if (state.inverted) {
                  charIdx = Math.floor(((255 - lum) / 255) * (revDensity.length - 1));
@@ -605,7 +668,6 @@ function renderFrame() {
             
             const char = revDensity[charIdx];
             
-            // Draw
             if (state.colored) {
                 dCtx.fillStyle = `rgb(${r|0},${g|0},${b|0})`;
             } else {
@@ -620,7 +682,7 @@ function renderFrame() {
 // --- GIF Recording ---
 
 async function startRecording() {
-    if (state.images.length === 0 || state.isRecording) return;
+    if (state.slides.length === 0 || state.isRecording) return;
     
     stopAnimation();
     state.isRecording = true;
@@ -642,46 +704,44 @@ async function startRecording() {
         repeat: 0 // 0 = loop forever
     });
     
-    // Simulate animation loop
-    // Sync GIF speed with current playback speed
-    // Base speed (1.0x) is approx 2 seconds per transition in animate() logic (0.5 * speed)
-    const transitionDuration = 2.0 / state.speed; // seconds
-    const gifFPS = 20; // 20 frames per second
-    const framesPerTransition = Math.max(5, Math.round(transitionDuration * gifFPS));
-    const frameDelay = 1000 / gifFPS; // 50ms
+    const gifFPS = 20; 
+    const frameDelay = 1000 / gifFPS;
     
-    const step = 1.0 / framesPerTransition;
+    let tasks = [];
     
-    // We need to loop through all transitions
-    // 0->1, 1->2, ..., N->0
+    for (let i = 0; i < state.slides.length; i++) {
+        const dur = state.slides[i].duration || 1.0;
+        const seconds = (dur * 2.0) / state.speed;
+        const frames = Math.max(2, Math.round(seconds * gifFPS));
+        
+        for (let f = 0; f < frames; f++) {
+            tasks.push({
+                idx: i,
+                t: f / frames
+            });
+        }
+    }
     
-    let frameCount = 0;
-    const totalSteps = state.images.length * framesPerTransition;
+    let taskIndex = 0;
+    const totalTasks = tasks.length;
 
     function captureStep() {
-        if (!state.isRecording) return; // Cancelled
+        if (!state.isRecording) return;
         
-        // Calculate precise state based on integer frame count
-        // This avoids floating point drift and ensures a perfect loop
-        const transitionIdx = Math.floor(frameCount / framesPerTransition);
-        const frameInTransition = frameCount % framesPerTransition;
+        const task = tasks[taskIndex];
         
-        state.t = frameInTransition / framesPerTransition;
-        
-        // Wrap indices
-        const imgCount = state.images.length;
-        state.currentImageIndex = transitionIdx % imgCount;
-        state.nextImageIndex = (state.currentImageIndex + 1) % imgCount;
+        state.currentImageIndex = task.idx;
+        state.nextImageIndex = (task.idx + 1) % state.slides.length;
+        state.t = task.t;
         
         renderFrame();
         gif.addFrame(elements.displayCanvas, {copy: true, delay: frameDelay});
         
-        frameCount++;
-        const pct = Math.round((frameCount / totalSteps) * 100);
+        taskIndex++;
+        const pct = Math.round((taskIndex / totalTasks) * 100);
         elements.recProgress.innerText = `${pct}%`;
         
-        if (frameCount < totalSteps) {
-            // Use setTimeout to allow UI to breathe
+        if (taskIndex < totalTasks) {
             setTimeout(captureStep, 0);
         } else {
             finishRecording(gif);
@@ -694,7 +754,6 @@ async function startRecording() {
 function finishRecording(gif) {
     elements.recProgress.innerText = "Rendering...";
     gif.on('finished', (blob) => {
-        // Create download link
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.style.display = 'none';
@@ -703,7 +762,6 @@ function finishRecording(gif) {
         document.body.appendChild(a);
         a.click();
         
-        // Cleanup
         setTimeout(() => {
             document.body.removeChild(a);
             window.URL.revokeObjectURL(url);
@@ -713,12 +771,10 @@ function finishRecording(gif) {
         elements.recordingStatus.style.display = 'none';
         elements.recordBtn.disabled = false;
         
-        // Resume playback automatically
         togglePlay();
     });
     gif.render();
 }
-
 
 // Start
 init();
