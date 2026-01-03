@@ -18,6 +18,7 @@ const elements = {
     contrastRange: document.getElementById('contrastRange'),
     contrastVal: document.getElementById('contrastVal'),
     colorToggle: document.getElementById('colorToggle'),
+    invertToggle: document.getElementById('invertToggle'),
     container: document.getElementById('asciiContainer'),
     displayCanvas: document.getElementById('displayCanvas'),
     displayCtx: document.getElementById('displayCanvas').getContext('2d'),
@@ -47,6 +48,7 @@ let state = {
     resolution: 80, // Width in characters
     contrast: 1.0,
     colored: true,
+    inverted: false, // Light mode
     aspectRatio: 1.0, // width / height
 };
 
@@ -79,6 +81,16 @@ function init() {
         state.colored = e.target.checked;
         if (!state.isPlaying) renderFrame();
     });
+
+    elements.invertToggle.addEventListener('change', (e) => {
+        state.inverted = e.target.checked;
+        if (state.inverted) {
+            document.body.classList.add('light-mode');
+        } else {
+            document.body.classList.remove('light-mode');
+        }
+        if (!state.isPlaying) renderFrame();
+    });
     
     // Initial resize to set canvas defaults
     handleResize();
@@ -97,10 +109,6 @@ function handleResize() {
     }
 
     // Use the effective aspect ratio of our grid
-    // Grid width = state.gridW * charWidth
-    // Grid height = state.gridH * charHeight
-    // charWidth/charHeight ~= 0.6
-    // Effective Aspect = (state.gridW * 0.6) / state.gridH
     const targetAspect = (state.gridW * 0.6) / state.gridH;
 
     let canvasW, canvasH;
@@ -280,31 +288,19 @@ function renderFrame() {
     const dW = elements.displayCanvas.width;
     const dH = elements.displayCanvas.height;
     
+    // Theme Colors
+    const bgColor = state.inverted ? '#ffffff' : '#000000';
+    const defaultColor = state.inverted ? '#000000' : '#ffffff'; // White text in dark mode as requested
+
     // Clear background
-    dCtx.fillStyle = '#000'; // Dark background
+    dCtx.fillStyle = bgColor;
     dCtx.fillRect(0, 0, dW, dH);
     
     // Calculate Cell Size
-    // We sized the canvas to match the effective aspect ratio (w*0.6 / h)
-    // So dW / w should be approx dH / h * 0.6
-    
-    // We want to fill the canvas.
     const cellW = dW / w;
     const cellH = dH / h;
-    
-    // Font size logic
-    // We want the font height to equal cell height.
-    // And font width (~0.6 * height) to equal cell width.
-    // Since we forced the canvas AR, cellW should be roughly 0.6 * cellH.
-    // So we can just set font size to cellH.
-    
-    // Little buffer to prevent overlap? Or tight fit? 
-    // Tight fit is better for "solid" look.
-    // Actually, text rendering often includes some line gap.
-    // 'Fira Code' at 20px might be 24px line height depending on metric.
-    // We'll trust px size.
-    
     const fontSize = cellH; 
+    
     dCtx.font = `${fontSize}px 'Fira Code', monospace`;
     dCtx.textBaseline = 'top';
 
@@ -353,14 +349,57 @@ function renderFrame() {
             const lum = (0.299 * r + 0.587 * g + 0.114 * b);
             
             // Char mapping
-            const charIdx = Math.floor((lum / 255) * (revDensity.length - 1));
+            // For light mode (black text on white), we might want to invert density?
+            // "Dark" pixels (low luminance) are usually represented by DENSE chars (like @).
+            // "Light" pixels (high luminance) are represented by EMPTY chars (like space).
+            // On a BLACK background: Light pixels -> Text -> White/Color. Space -> Black.
+            // On a WHITE background: Dark pixels -> Text -> Black. Space -> White.
+            // 
+            // So:
+            // Black Background (Standard):
+            //   Luminance 255 (White) -> Should be visible -> Dense Char? Or Light Char?
+            //   Usually: Bright = Visible = Dense Char if drawing 'Light on Dark'.
+            //   Wait, ASCII art usually maps:
+            //   Darker pixels -> Denser chars (because ink is dark).
+            //   But on a terminal (Light on Dark):
+            //   Brighter pixels -> Denser chars (because text is light).
+            
+            // Let's check standard mapping:
+            // revDensity = density.split('').reverse().join('');
+            // density ends with space " ".
+            // If I map 255 (White) to revDensity.length-1, I get the last char.
+            // If density = "$@... ", then revDensity = " ...@$".
+            // So 255 -> $ (Dense). 
+            // This assumes Light Text on Dark Background (Brightness = Density).
+            
+            // In LIGHT MODE (Dark Text on Light Background):
+            // We want Dark Pixels (Low Lum) to be Dense.
+            // We want Light Pixels (High Lum) to be Empty (White paper).
+            // So: Low Lum -> Dense. High Lum -> Empty.
+            // This is the REVERSE of the Dark Mode mapping.
+            
+            let charIdx;
+            if (state.inverted) {
+                 // Light Mode: 0 (Black) -> Dense ($). 255 (White) -> Empty (Space).
+                 // So we invert the mapping index.
+                 // (255 - lum) / 255
+                 charIdx = Math.floor(((255 - lum) / 255) * (revDensity.length - 1));
+            } else {
+                 // Dark Mode: 255 (White) -> Dense ($). 0 (Black) -> Empty (Space).
+                 charIdx = Math.floor((lum / 255) * (revDensity.length - 1));
+            }
+            
             const char = revDensity[charIdx];
             
             // Draw
             if (state.colored) {
+                // In Light Mode, if we have a very light pixel (white),
+                // we map it to empty space. The text color doesn't matter much if it's a space.
+                // But for mid-tones?
+                // RGB is RGB.
                 dCtx.fillStyle = `rgb(${r|0},${g|0},${b|0})`;
             } else {
-                dCtx.fillStyle = '#33ff33';
+                dCtx.fillStyle = defaultColor;
             }
             
             dCtx.fillText(char, x * cellW, y * cellH, cellW);

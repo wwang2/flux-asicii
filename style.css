@@ -1,7 +1,17 @@
 :root {
     --bg-color: #050505;
     --term-color: #33ff33; /* Default green terminal */
+    --ui-bg: rgba(0, 0, 0, 0.85);
+    --ui-border: #333;
     --font-stack: 'Fira Code', 'Courier New', Courier, monospace;
+}
+
+/* Light Theme Variables */
+body.light-mode {
+    --bg-color: #f0f0f0;
+    --term-color: #000000;
+    --ui-bg: rgba(255, 255, 255, 0.85);
+    --ui-border: #ccc;
 }
 
 body {
@@ -14,9 +24,11 @@ body {
     height: 100vh;
     display: flex;
     flex-direction: column;
+    transition: background-color 0.3s, color 0.3s;
 }
 
-/* CRT Overlay Effects */
+/* CRT Overlay Effects - Dim them in light mode or remove? 
+   Usually CRT is for dark terminals. We'll reduce opacity. */
 .crt-overlay {
     position: fixed;
     top: 0;
@@ -37,6 +49,10 @@ body {
     z-index: 10;
 }
 
+body.light-mode .crt-overlay {
+    opacity: 0.3; /* Make it subtle */
+}
+
 .scanline {
     width: 100%;
     height: 100px;
@@ -49,6 +65,10 @@ body {
     pointer-events: none;
 }
 
+body.light-mode .scanline {
+    background: linear-gradient(0deg, rgba(255,255,255,0) 0%, rgba(0, 0, 0, 0.05) 50%, rgba(255,255,255,0) 100%);
+}
+
 @keyframes scanline {
     0% { bottom: 100%; }
     100% { bottom: -100px; }
@@ -59,16 +79,18 @@ body {
     position: absolute;
     top: 20px;
     left: 20px;
-    background: rgba(0, 0, 0, 0.85);
-    border: 1px solid #333;
+    background: var(--ui-bg);
+    border: 1px solid var(--ui-border);
     padding: 20px;
     border-radius: 8px;
     z-index: 20;
     backdrop-filter: blur(5px);
-    box-shadow: 0 0 15px rgba(0, 255, 0, 0.1);
+    box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
     max-width: 300px;
-    transition: opacity 0.3s;
+    transition: opacity 0.3s, background 0.3s, border-color 0.3s;
 }
+
+/* ... existing styles ... */
 
 .controls:hover {
     opacity: 1;
@@ -79,8 +101,12 @@ body {
     font-size: 1.5rem;
     text-transform: uppercase;
     letter-spacing: 2px;
-    text-shadow: 0 0 5px var(--term-color);
+    text-shadow: 0 0 5px var(--term-color); /* This might look weird in black on white? */
     margin-bottom: 20px;
+}
+
+body.light-mode .controls h1 {
+    text-shadow: none; /* Clean look for light mode */
 }
 
 .control-group {
@@ -119,6 +145,10 @@ input[type="file"] {
     background: rgba(0, 255, 0, 0.1);
 }
 
+body.light-mode .file-upload-btn {
+    background: rgba(0, 0, 0, 0.05);
+}
+
 .file-upload-btn:hover {
     background: var(--term-color);
     color: var(--bg-color);
@@ -141,11 +171,20 @@ button:hover:not(:disabled) {
     box-shadow: 0 0 10px var(--term-color);
 }
 
+body.light-mode button:hover:not(:disabled) {
+    box-shadow: 0 0 10px rgba(0,0,0,0.2);
+}
+
 button:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     border-color: #555;
     color: #555;
+}
+
+body.light-mode button:disabled {
+    border-color: #999;
+    color: #999;
 }
 
 input[type="range"] {
@@ -169,6 +208,10 @@ input[type="range"]::-webkit-slider-runnable-track {
     background: #333;
 }
 
+body.light-mode input[type="range"]::-webkit-slider-runnable-track {
+    background: #ccc;
+}
+
 /* ASCII Output - Canvas */
 .ascii-container {
     flex: 1;
@@ -179,21 +222,31 @@ input[type="range"]::-webkit-slider-runnable-track {
     position: relative;
     width: 100%;
     height: 100%;
-    padding: 20px; /* Padding so it doesn't touch edges */
+    padding: 20px; 
     box-sizing: border-box;
 }
 
 #displayCanvas {
-    /* The canvas will be sized by JS, but we ensure it fits effectively */
     max-width: 100%;
     max-height: 100%;
     box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
     
-    /* Bloom Effect on the canvas itself */
+    /* Default dark mode bloom */
     filter: contrast(1.1) brightness(1.2) drop-shadow(0 0 4px rgba(51, 255, 51, 0.3));
 }
 
+body.light-mode #displayCanvas {
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.1);
+    /* Clean look for light mode, remove bloom or make it subtle */
+    filter: none;
+}
+
 .mono-mode #displayCanvas {
-    /* If mono, simpler look */
+    /* If mono (dark mode), simpler look */
     filter: contrast(1.2) sepia(1) hue-rotate(80deg) saturate(3);
+}
+
+body.light-mode.mono-mode #displayCanvas {
+    /* Mono light mode (black text on white) */
+    filter: contrast(1.2);
 }
