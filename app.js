@@ -11,6 +11,7 @@ const elements = {
     recordBtn: document.getElementById('recordBtn'),
     recordingStatus: document.getElementById('recordingStatus'),
     recProgress: document.getElementById('recProgress'),
+    transitionSelect: document.getElementById('transitionSelect'),
     speedRange: document.getElementById('speedRange'),
     speedVal: document.getElementById('speedVal'),
     resolutionRange: document.getElementById('resolutionRange'),
@@ -50,6 +51,7 @@ let state = {
     colored: true,
     inverted: false, // Light mode
     aspectRatio: 1.0, // width / height
+    transitionType: 'fade', // Default
 };
 
 // --- Initialization & Event Listeners ---
@@ -60,6 +62,10 @@ function init() {
     elements.playBtn.addEventListener('click', togglePlay);
     elements.recordBtn.addEventListener('click', startRecording);
     
+    elements.transitionSelect.addEventListener('change', (e) => {
+        state.transitionType = e.target.value;
+    });
+
     elements.speedRange.addEventListener('input', (e) => {
         state.speed = parseFloat(e.target.value);
         elements.speedVal.innerText = state.speed.toFixed(1) + 'x';
@@ -274,6 +280,10 @@ function animate(timestamp) {
 
 // --- Rendering ---
 
+function pseudoRandom(x, y) {
+    return ((Math.sin(x * 12.9898 + y * 78.233) * 43758.5453) % 1 + 1) % 1;
+}
+
 function renderFrame() {
     if (state.images.length === 0) return;
 
@@ -290,7 +300,7 @@ function renderFrame() {
     
     // Theme Colors
     const bgColor = state.inverted ? '#ffffff' : '#000000';
-    const defaultColor = state.inverted ? '#000000' : '#ffffff'; // White text in dark mode as requested
+    const defaultColor = state.inverted ? '#000000' : '#ffffff'; 
 
     // Clear background
     dCtx.fillStyle = bgColor;
@@ -305,36 +315,93 @@ function renderFrame() {
     dCtx.textBaseline = 'top';
 
     // Optimization: renderLoop
-    
-    // Pre-calc contrast factor
     const contrast = state.contrast;
-    const factor = (259 * (contrast + 255)) / (255 * (259 - contrast)); // Standard contrast formula
+    const factor = (259 * (contrast + 255)) / (255 * (259 - contrast));
     
     for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
             const i = (y * w + x) * 4;
             
-            // LERP
-            let r, g, b;
+            // Calculate Blend Factor (alpha) based on transition type
+            let alpha = 0; // 0 = img1, 1 = img2
             
-            if (state.t <= 0) {
-                 r = img1.data[i];
-                 g = img1.data[i+1];
-                 b = img1.data[i+2];
-            } else if (state.t >= 1) { 
-                 r = img2.data[i];
-                 g = img2.data[i+1];
-                 b = img2.data[i+2];
-            } else {
-                 const t = state.t;
-                 r = img1.data[i] + (img2.data[i] - img1.data[i]) * t;
-                 g = img1.data[i+1] + (img2.data[i+1] - img1.data[i+1]) * t;
-                 b = img1.data[i+2] + (img2.data[i+2] - img1.data[i+2]) * t;
+            switch (state.transitionType) {
+                case 'fade':
+                    alpha = state.t;
+                    break;
+                    
+                case 'wipe':
+                    // Scan from left to right with soft edge
+                    // Limit goes from -0.2 to 1.2 to fully clear
+                    const limit = state.t * 1.4 - 0.2;
+                    const v = x / w;
+                    // Smoothstep manually: clamp((x - edge0) / (edge1 - edge0), 0, 1)
+                    // We want alpha=1 when v < limit.
+                    // Actually, let's say left side is NEW image (alpha=1).
+                    // So if x/w < limit -> 1.
+                    // Soft edge:
+                    alpha = 1.0 - Math.min(Math.max((v - limit) / 0.2, 0), 1);
+                    break;
+                    
+                case 'dissolve':
+                    const noise = pseudoRandom(x, y);
+                    // Soft dissolve
+                    // if t > noise, switch.
+                    // blend around threshold
+                    const threshold = state.t;
+                    alpha = Math.min(Math.max((threshold - noise) / 0.1 + 0.5, 0), 1);
+                    break;
+                
+                case 'venetian':
+                    // Horizontal blinds
+                    const bands = 10;
+                    const bandH = h / bands;
+                    const bandY = y % bandH;
+                    const bandLimit = state.t * bandH;
+                    // Grow from 0 height to bandH height
+                    if (bandY < bandLimit) alpha = 1;
+                    else alpha = 0;
+                    // Maybe blend edge
+                    break;
+                    
+                case 'flash':
+                    // This is handled differently. We blend normally then flash white.
+                    alpha = state.t; // Base fade
+                    // But we modify the final color later.
+                    break;
+                    
+                default:
+                    alpha = state.t;
+            }
+            
+            // LERP
+            // Get pixels
+            const r1 = img1.data[i];
+            const g1 = img1.data[i+1];
+            const b1 = img1.data[i+2];
+            
+            const r2 = img2.data[i];
+            const g2 = img2.data[i+1];
+            const b2 = img2.data[i+2];
+            
+            let r = r1 + (r2 - r1) * alpha;
+            let g = g1 + (g2 - g1) * alpha;
+            let b = b1 + (b2 - b1) * alpha;
+
+            // Handle "Flash" overexposure
+            if (state.transitionType === 'flash') {
+                // Peak at 0.5
+                const flash = Math.max(0, 1 - Math.abs(state.t - 0.5) * 4); // sharp peak
+                if (flash > 0) {
+                    const flashColor = 255;
+                    r = r + (flashColor - r) * flash;
+                    g = g + (flashColor - g) * flash;
+                    b = b + (flashColor - b) * flash;
+                }
             }
             
             // Contrast
             if (contrast !== 1.0) {
-                // Simple linear contrast
                 r = factor * (r - 128) + 128;
                 g = factor * (g - 128) + 128;
                 b = factor * (b - 128) + 128;
@@ -349,43 +416,10 @@ function renderFrame() {
             const lum = (0.299 * r + 0.587 * g + 0.114 * b);
             
             // Char mapping
-            // For light mode (black text on white), we might want to invert density?
-            // "Dark" pixels (low luminance) are usually represented by DENSE chars (like @).
-            // "Light" pixels (high luminance) are represented by EMPTY chars (like space).
-            // On a BLACK background: Light pixels -> Text -> White/Color. Space -> Black.
-            // On a WHITE background: Dark pixels -> Text -> Black. Space -> White.
-            // 
-            // So:
-            // Black Background (Standard):
-            //   Luminance 255 (White) -> Should be visible -> Dense Char? Or Light Char?
-            //   Usually: Bright = Visible = Dense Char if drawing 'Light on Dark'.
-            //   Wait, ASCII art usually maps:
-            //   Darker pixels -> Denser chars (because ink is dark).
-            //   But on a terminal (Light on Dark):
-            //   Brighter pixels -> Denser chars (because text is light).
-            
-            // Let's check standard mapping:
-            // revDensity = density.split('').reverse().join('');
-            // density ends with space " ".
-            // If I map 255 (White) to revDensity.length-1, I get the last char.
-            // If density = "$@... ", then revDensity = " ...@$".
-            // So 255 -> $ (Dense). 
-            // This assumes Light Text on Dark Background (Brightness = Density).
-            
-            // In LIGHT MODE (Dark Text on Light Background):
-            // We want Dark Pixels (Low Lum) to be Dense.
-            // We want Light Pixels (High Lum) to be Empty (White paper).
-            // So: Low Lum -> Dense. High Lum -> Empty.
-            // This is the REVERSE of the Dark Mode mapping.
-            
             let charIdx;
             if (state.inverted) {
-                 // Light Mode: 0 (Black) -> Dense ($). 255 (White) -> Empty (Space).
-                 // So we invert the mapping index.
-                 // (255 - lum) / 255
                  charIdx = Math.floor(((255 - lum) / 255) * (revDensity.length - 1));
             } else {
-                 // Dark Mode: 255 (White) -> Dense ($). 0 (Black) -> Empty (Space).
                  charIdx = Math.floor((lum / 255) * (revDensity.length - 1));
             }
             
@@ -393,10 +427,6 @@ function renderFrame() {
             
             // Draw
             if (state.colored) {
-                // In Light Mode, if we have a very light pixel (white),
-                // we map it to empty space. The text color doesn't matter much if it's a space.
-                // But for mid-tones?
-                // RGB is RGB.
                 dCtx.fillStyle = `rgb(${r|0},${g|0},${b|0})`;
             } else {
                 dCtx.fillStyle = defaultColor;

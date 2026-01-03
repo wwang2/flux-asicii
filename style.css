@@ -187,6 +187,35 @@ body.light-mode button:disabled {
     color: #999;
 }
 
+select {
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--term-color);
+    color: var(--term-color);
+    padding: 5px;
+    font-family: var(--font-stack);
+    font-size: 0.8rem;
+    width: 100%;
+    cursor: pointer;
+    outline: none;
+    margin-top: 5px;
+}
+
+select option {
+    background: var(--bg-color);
+    color: var(--term-color);
+}
+
+body.light-mode select {
+    background: rgba(255, 255, 255, 0.5);
+    border-color: #999;
+    color: #000;
+}
+
+body.light-mode select option {
+    background: #fff;
+    color: #000;
+}
+
 input[type="range"] {
     width: 100%;
     background: transparent;
