@@ -1,10 +1,18 @@
-# FluxASCII
+<p align="center">
+  <span style="font-family: 'Fira Mono', 'Consolas', 'Menlo', monospace; font-size: 2em;">
+    FluxASCII
+  </span>
+</p>
 
 A static, browser-based tool for converting image sequences into animated ASCII art with retro terminal effects.
 
-**[Launch Live App](https://wwang2.github.io/flux-asicii/)**
-
-<img src="assets/example.gif" alt="FluxASCII Demo" width="360" height="auto">
+<p align="center">
+  <strong>
+    <a href="https://wwang2.github.io/flux-asicii/">Launch Live App</a>
+  </strong>
+  <br><br>
+  <img src="assets/example.gif" alt="FluxASCII Demo" width="360" height="auto">
+</p>
 
 ## Features
 
