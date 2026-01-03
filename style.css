@@ -365,7 +365,7 @@ body.light-mode .timeline-track-area { background: rgba(0,0,0,0.02); }
 
 .timeline-track {
     display: flex;
-    gap: 2px;
+    gap: 0; /* Removing gap because transition block will provide spacing */
     height: 100px;
     min-width: 0; 
     position: relative;
@@ -385,6 +385,7 @@ body.light-mode .timeline-track-area { background: rgba(0,0,0,0.02); }
     display: flex;
     align-items: center;
     justify-content: center;
+    flex-shrink: 0;
 }
 
 body.light-mode .track-clip {
@@ -422,6 +423,42 @@ body.light-mode .track-clip.selected {
     padding: 2px 4px;
     border-radius: 3px;
     pointer-events: none;
+}
+
+/* Transition Block in Timeline */
+.transition-block {
+    height: 100%;
+    background: repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 5px,
+      rgba(255, 255, 255, 0.05) 5px,
+      rgba(255, 255, 255, 0.05) 10px
+    );
+    border-top: 1px dashed var(--ui-border);
+    border-bottom: 1px dashed var(--ui-border);
+    flex-shrink: 0;
+    position: relative;
+    opacity: 0.5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.transition-block:after {
+    content: '↔';
+    font-size: 10px;
+    color: var(--ui-border);
+}
+
+body.light-mode .transition-block {
+    background: repeating-linear-gradient(
+      45deg,
+      transparent,
+      transparent 5px,
+      rgba(0, 0, 0, 0.05) 5px,
+      rgba(0, 0, 0, 0.05) 10px
+    );
 }
 
 /* Scrubber Overlay */

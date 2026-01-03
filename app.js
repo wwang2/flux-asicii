@@ -92,6 +92,7 @@ function init() {
     elements.transitionDurRange.addEventListener('input', (e) => {
         state.transitionDuration = parseFloat(e.target.value);
         elements.transitionDurVal.innerText = state.transitionDuration.toFixed(1) + 's';
+        renderTimeline();
     });
 
     elements.speedRange.addEventListener('input', (e) => {
@@ -400,6 +401,13 @@ function renderTimeline() {
         clip.addEventListener('drop', handleDrop);
         
         elements.timelineTrack.appendChild(clip);
+
+        // Add Transition Block
+        const transBlock = document.createElement('div');
+        transBlock.className = 'transition-block';
+        const transWidth = state.transitionDuration * 100 * state.zoom;
+        transBlock.style.width = `${transWidth}px`;
+        elements.timelineTrack.appendChild(transBlock);
     });
 }
 
