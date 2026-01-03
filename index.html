@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FluxASCII</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Load gif.js library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gif.js/0.2.0/gif.js"></script>
+</head>
+<body>
+    <div class="crt-overlay"></div>
+    <div class="scanline"></div>
+
+    <div class="controls">
+        <h1>FluxASCII</h1>
+        
+        <div class="control-group">
+            <label for="imageUpload" class="file-upload-btn">Upload Images</label>
+            <input type="file" id="imageUpload" accept="image/*" multiple>
+            <span id="fileCount">0 files loaded</span>
+        </div>
+
+        <div class="control-group">
+            <div class="btn-row">
+                <button id="playBtn">Play</button>
+                <button id="recordBtn" disabled>Make GIF</button>
+            </div>
+            <div id="recordingStatus" style="display:none; color: #ff3333; font-size: 0.8rem; margin-top: 5px;">Recording... <span id="recProgress">0%</span></div>
+        </div>
+
+        <div class="control-group">
+            <label>Speed <span id="speedVal">1.0x</span></label>
+            <input type="range" id="speedRange" min="0.1" max="5.0" step="0.1" value="1.0">
+        </div>
+
+        <div class="control-group">
+            <label>Resolution <span id="resVal">80 chars</span></label>
+            <input type="range" id="resolutionRange" min="40" max="200" step="1" value="80">
+        </div>
+
+        <div class="control-group">
+            <label>Contrast <span id="contrastVal">1.0</span></label>
+            <input type="range" id="contrastRange" min="0.5" max="3.0" step="0.1" value="1.0">
+        </div>
+
+        <div class="control-group">
+            <label>
+                <input type="checkbox" id="colorToggle" checked> Colored
+            </label>
+        </div>
+    </div>
+
+    <div class="ascii-container" id="asciiContainer">
+        <!-- Main display canvas -->
+        <canvas id="displayCanvas"></canvas>
+    </div>
+
+    <!-- Hidden canvas for pixel processing -->
+    <canvas id="processCanvas" style="display: none;"></canvas>
+
+    <script src="app.js"></script>
+</body>
+</html>
