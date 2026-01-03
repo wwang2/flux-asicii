@@ -11,7 +11,16 @@ A static, browser-based tool for converting image sequences into animated ASCII 
     <a href="https://wwang2.github.io/flux-asicii/">Launch Live App</a>
   </strong>
   <br><br>
-  <img src="assets/example.gif" alt="FluxASCII Demo" width="360" height="auto">
+  <table align="center">
+    <tr>
+      <td>
+        <img src="assets/example.gif" alt="FluxASCII Demo" width="360" height="auto">
+      </td>
+      <td>
+        <img src="assets/catie_chloe.gif" alt="FluxASCII Catie & Chloe Demo" width="360" height="auto">
+      </td>
+    </tr>
+  </table>
 </p>
 
 ## Features
