@@ -458,21 +458,22 @@ async function startRecording() {
         quality: 10,
         workerScript: workerBlob,
         width: elements.displayCanvas.width,
-        height: elements.displayCanvas.height
+        height: elements.displayCanvas.height,
+        repeat: 0 // 0 = loop forever
     });
     
     // Simulate animation loop
-    const totalFrames = state.images.length * 30; // e.g., 30 frames per transition
-    // Depends on speed. Let's fix 20 frames per image transition for GIF
-    const framesPerTransition = 20;
+    // Sync GIF speed with current playback speed
+    // Base speed (1.0x) is approx 2 seconds per transition in animate() logic (0.5 * speed)
+    const transitionDuration = 2.0 / state.speed; // seconds
+    const gifFPS = 20; // 20 frames per second
+    const framesPerTransition = Math.max(5, Math.round(transitionDuration * gifFPS));
+    const frameDelay = 1000 / gifFPS; // 50ms
+    
     const step = 1.0 / framesPerTransition;
     
     // We need to loop through all transitions
     // 0->1, 1->2, ..., N->0
-    
-    state.currentImageIndex = 0;
-    state.nextImageIndex = (state.images.length > 1) ? 1 : 0;
-    state.t = 0;
     
     let frameCount = 0;
     const totalSteps = state.images.length * framesPerTransition;
@@ -480,16 +481,20 @@ async function startRecording() {
     function captureStep() {
         if (!state.isRecording) return; // Cancelled
         
-        renderFrame();
-        gif.addFrame(elements.displayCanvas, {copy: true, delay: 50}); // 50ms = 20fps
+        // Calculate precise state based on integer frame count
+        // This avoids floating point drift and ensures a perfect loop
+        const transitionIdx = Math.floor(frameCount / framesPerTransition);
+        const frameInTransition = frameCount % framesPerTransition;
         
-        // Advance
-        state.t += step;
-        if (state.t >= 1.0) {
-            state.t = 0;
-            state.currentImageIndex = state.nextImageIndex;
-            state.nextImageIndex = (state.currentImageIndex + 1) % state.images.length;
-        }
+        state.t = frameInTransition / framesPerTransition;
+        
+        // Wrap indices
+        const imgCount = state.images.length;
+        state.currentImageIndex = transitionIdx % imgCount;
+        state.nextImageIndex = (state.currentImageIndex + 1) % imgCount;
+        
+        renderFrame();
+        gif.addFrame(elements.displayCanvas, {copy: true, delay: frameDelay});
         
         frameCount++;
         const pct = Math.round((frameCount / totalSteps) * 100);
@@ -509,10 +514,27 @@ async function startRecording() {
 function finishRecording(gif) {
     elements.recProgress.innerText = "Rendering...";
     gif.on('finished', (blob) => {
-        window.open(URL.createObjectURL(blob));
+        // Create download link
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = 'flux-ascii-loop.gif';
+        document.body.appendChild(a);
+        a.click();
+        
+        // Cleanup
+        setTimeout(() => {
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+        }, 100);
+
         state.isRecording = false;
         elements.recordingStatus.style.display = 'none';
         elements.recordBtn.disabled = false;
+        
+        // Resume playback automatically
+        togglePlay();
     });
     gif.render();
 }
